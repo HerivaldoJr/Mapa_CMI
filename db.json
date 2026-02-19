@@ -1,0 +1,35 @@
+{
+  "visitasEstados": {},
+  "visitasMunicipios": {},
+  "visitasBairros": {},
+  "manualCoords": {},
+  "manualCoordsMunicipios": {},
+  "manualCoordsBairros": {},
+  "dadosIDHBairros": {},
+  "customBairrosData": {
+    "type": "FeatureCollection",
+    "features": []
+  },
+  "estadosMetadata": {},
+  "style": {
+    "size": 12,
+    "weight": "bold",
+    "color": "#333333",
+    "title": "Monitoramento de Visitas",
+    "selectionBox": false,
+    "balloonPadding": "4px 8px"
+  },
+  "labelSettings": {
+    "showNameLabelsBrasil": false,
+    "showNameLabelsCeara": false,
+    "showNameLabelsFortaleza": false,
+    "showNumberLabelsBrasil": true,
+    "showNumberLabelsCeara": true,
+    "showNumberLabelsFortaleza": true
+  },
+  "theme": "classic",
+  "featureToggles": {
+    "statisticalAnalysis": false,
+    "presentationMode": false
+  }
+}
