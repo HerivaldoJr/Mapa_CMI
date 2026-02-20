@@ -11,6 +11,7 @@
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css"/>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -2228,419 +2229,142 @@ MINAS GERAIS,1200,0.731'></textarea>
     }
     
     // ==================== FUNÇÕES DE BANCO DE DADOS ====================
-    function openDatabase() {
-        silentLog('Abrindo banco de dados...');
-        return new Promise((resolve, reject) => {
-            try {
-                if (db && dbInitialized) {
-                    silentLog('Banco já está aberto', 'success');
-                    resolve(db);
-                    return;
-                }
-                
-                const request = indexedDB.open(DB_NAME, DB_VERSION);
-                
-                request.onerror = (event) => {
-                    const error = event.target.error;
-                    silentLog(`Erro ao abrir IndexedDB: ${error}`, 'error');
-                    
-                    // Se o erro for de versão (requested version is less than existing version)
-                    // Tentamos abrir com a versão existente ou forçar um reset
-                    if (error.name === 'VersionError') {
-                        silentLog('Detectado erro de versão. Tentando recuperar...', 'warning');
-                        const retryRequest = indexedDB.open(DB_NAME);
-                        retryRequest.onsuccess = (e) => {
-                            const currentDB = e.target.result;
-                            const currentVersion = currentDB.version;
-                            currentDB.close();
-                            silentLog(`Versão atual no navegador: ${currentVersion}. Reiniciando com versão superior.`, 'info');
-                            const finalRequest = indexedDB.open(DB_NAME, Math.max(currentVersion + 1, DB_VERSION + 1));
-                            finalRequest.onsuccess = (fe) => {
-                                db = fe.target.result;
-                                dbInitialized = true;
-                                resolve(db);
-                            };
-                            finalRequest.onupgradeneeded = request.onupgradeneeded;
-                        };
-                        retryRequest.onerror = () => {
-                            silentLog('Falha ao recuperar versão. Deletando banco para resetar...', 'error');
-                            indexedDB.deleteDatabase(DB_NAME);
-                            location.reload();
-                        };
-                    } else {
-                        reject(error);
-                    }
-                };
-                
-                request.onsuccess = (event) => {
-                    silentLog('IndexedDB aberto com sucesso', 'success');
-                    db = event.target.result;
-                    dbInitialized = true;
-                    resolve(db);
-                };
-                
-                request.onupgradeneeded = (event) => {
-                    silentLog(`Atualizando banco de dados... Versão: ${event.oldVersion} -> ${event.newVersion}`);
-                    const dbRef = event.target.result;
-                    
-                    if (!dbRef.objectStoreNames.contains(STORE_NAME)) {
-                        const store = dbRef.createObjectStore(STORE_NAME, { keyPath: 'id' });
-                        store.createIndex('id', 'id', { unique: true });
-                        silentLog('Store criada com sucesso');
-                    }
-                    
-                    // Se for uma atualização (primeira carga ou versão nova), podemos pré-popular com INITIAL_DATA
-                    // Isso garante que, mesmo que o loadFromDatabase falhe, o banco tenha a estrutura correta.
-                    if (event.oldVersion < DB_VERSION) {
-                        silentLog('Populando banco com dados iniciais devido à atualização de versão.');
-                        const transaction = event.target.transaction;
-                        const store = transaction.objectStore(STORE_NAME);
-                        
-                        // Função auxiliar para colocar dados
-                        const putData = (id, data) => {
-                            try {
-                                store.put({ id, data });
-                            } catch (e) {
-                                silentLog(`Erro ao salvar dado inicial ${id}: ${e}`, 'error');
-                            }
-                        };
-                        
-                        // Inserir todos os dados iniciais
-                        putData('visitasEstados', INITIAL_DATA.visitasEstados);
-                        putData('manualCoords', INITIAL_DATA.manualCoords);
-                        putData('visitasMunicipios', INITIAL_DATA.visitasMunicipios);
-                        putData('manualCoordsMunicipios', INITIAL_DATA.manualCoordsMunicipios);
-                        putData('visitasBairros', INITIAL_DATA.visitasBairros);
-                        putData('manualCoordsBairros', INITIAL_DATA.manualCoordsBairros);
-                        putData('dadosIDHBairros', INITIAL_DATA.dadosIDHBairros);
-                        putData('customBairrosData', INITIAL_DATA.customBairrosData);
-                        putData('estadosMetadata', INITIAL_DATA.estadosMetadata);
-                        putData('style', INITIAL_DATA.style);
-                        putData('labelSettings', INITIAL_DATA.labelSettings);
-                        putData('autoCalculate', INITIAL_DATA.autoCalculate);
-                        putData('autoBackup', INITIAL_DATA.autoBackup);
-                        putData('advancedStats', INITIAL_DATA.advancedStats);
-                        putData('importHistory', INITIAL_DATA.importHistory);
-                        putData('lastValidConfig', INITIAL_DATA.lastValidConfig);
-                        putData('importMetadata', INITIAL_DATA.importMetadata);
-                        putData('versionHistory', INITIAL_DATA.versionHistory);
-                        putData('analysisCache', INITIAL_DATA.analysisCache);
-                        putData('featureToggles', INITIAL_DATA.featureToggles);
-                        putData('theme', INITIAL_DATA.theme);
-                        
-                        silentLog('Dados iniciais inseridos no banco durante o upgrade.', 'success');
-                    }
-                };
-            } catch (error) {
-                silentLog(`Erro crítico no IndexedDB: ${error}`, 'error');
-                reject(error);
-            }
-        });
-    }
-    
-    async function loadFromDatabase() {
-        silentLog('Iniciando carregamento do banco de dados...');
-        try {
-            const database = await openDatabase();
-            silentLog('Banco aberto, iniciando transação de leitura');
-            
-            return new Promise((resolve) => {
-                try {
-                    const transaction = database.transaction([STORE_NAME], 'readonly');
-                    const store = transaction.objectStore(STORE_NAME);
-                    
-                    const ids = [
-                        'visitasEstados', 'manualCoords', 'visitasMunicipios', 'manualCoordsMunicipios',
-                        'visitasBairros', 'manualCoordsBairros', 'dadosIDHBairros', 'customBairrosData',
-                        'estadosMetadata', 'style', 'labelSettings', 'autoCalculate', 'autoBackup',
-                        'advancedStats', 'importHistory', 'lastValidConfig', 'importMetadata',
-                        'versionHistory', 'analysisCache', 'featureToggles', 'theme'
-                    ];
-                    
-                    let pending = ids.length;
-                    let hasData = false;
-                    
-                    function checkComplete() {
-                        pending--;
-                        if (pending === 0) {
-                            silentLog('Todos os dados carregados do banco', 'success');
-                            
-                            // SÓ APLICA O MERGE SE NÃO HOUVER DADOS CARREGADOS
-                            if (!hasData) {
-                                silentLog('Nenhum dado encontrado no banco. Usando dados iniciais...', 'warning');
-                                
-                                // Usar dados iniciais apenas se não houver nada no banco
-                                visitasEstados = { ...INITIAL_DATA.visitasEstados };
-                                manualCoords = { ...INITIAL_DATA.manualCoords };
-                                visitasMunicipios = { ...INITIAL_DATA.visitasMunicipios };
-                                manualCoordsMunicipios = { ...INITIAL_DATA.manualCoordsMunicipios };
-                                visitasBairros = { ...INITIAL_DATA.visitasBairros };
-                                manualCoordsBairros = { ...INITIAL_DATA.manualCoordsBairros };
-                                dadosIDHBairros = { ...INITIAL_DATA.dadosIDHBairros };
-                                customBairrosData = JSON.parse(JSON.stringify(INITIAL_DATA.customBairrosData));
-                                estadosMetadata = { ...INITIAL_DATA.estadosMetadata };
-                                importMetadata = { ...INITIAL_DATA.importMetadata };
-                                versionHistory = Array.isArray(INITIAL_DATA.versionHistory) ? [...INITIAL_DATA.versionHistory] : [];
-                                analysisCache = { ...INITIAL_DATA.analysisCache };
-                                featureToggles = { ...INITIAL_DATA.featureToggles };
-                            }
-                            
-                            // Garantir que configurações básicas existam
-                            labelFontSize = labelFontSize || INITIAL_DATA.style.size;
-                            labelFontWeight = labelFontWeight || INITIAL_DATA.style.weight;
-                            labelFontColor = labelFontColor || INITIAL_DATA.style.color;
-                            systemTitle = systemTitle || INITIAL_DATA.style.title;
-                            balloonPadding = balloonPadding || INITIAL_DATA.style.balloonPadding;
-                            
-                            autoCalculate = (autoCalculate !== undefined && autoCalculate !== null) ? autoCalculate : INITIAL_DATA.autoCalculate;
-                            autoBackup = (autoBackup !== undefined && autoBackup !== null) ? autoBackup : INITIAL_DATA.autoBackup;
-                            advancedStats = (advancedStats !== undefined && advancedStats !== null) ? advancedStats : INITIAL_DATA.advancedStats;
-                            currentTheme = currentTheme || INITIAL_DATA.theme;
-                            
-                            silentLog('Carregamento concluído', 'success');
-                            resolve();
-                        }
-                    }
-                    
-                    ids.forEach(id => {
-                        try {
-                            const request = store.get(id);
-                            
-                            request.onsuccess = (event) => {
-                                const result = event.target.result;
-                                if (result && result.data !== undefined) {
-                                    hasData = true;
-                                    silentLog(`Carregado: ${id}`);
-                                    switch(id) {
-                                        case 'visitasEstados': visitasEstados = result.data || {}; break;
-                                        case 'manualCoords': manualCoords = result.data || {}; break;
-                                        case 'visitasMunicipios': visitasMunicipios = result.data || {}; break;
-                                        case 'manualCoordsMunicipios': manualCoordsMunicipios = result.data || {}; break;
-                                        case 'visitasBairros': visitasBairros = result.data || {}; break;
-                                        case 'manualCoordsBairros': manualCoordsBairros = result.data || {}; break;
-                                        case 'dadosIDHBairros': dadosIDHBairros = result.data || {}; break;
-                                        case 'customBairrosData': customBairrosData = result.data || { type: "FeatureCollection", features: [] }; break;
-                                        case 'estadosMetadata': estadosMetadata = result.data || {}; break;
-                                        case 'style': 
-                                            if (result.data) {
-                                                const style = result.data;
-                                                labelFontSize = style.size || 12;
-                                                labelFontWeight = style.weight || 'bold';
-                                                labelFontColor = style.color || '#333333';
-                                                systemTitle = style.title || 'Cidade Mais Infância';
-                                                showSelectionBoxFortaleza = style.selectionBox || false;
-                                                balloonPadding = style.balloonPadding || '4px 8px';
-                                                silentLog(`Estilo carregado: size=${labelFontSize}, weight=${labelFontWeight}, color=${labelFontColor}, balloonPadding=${balloonPadding}`);
-                                                
-                                                document.documentElement.style.setProperty('--label-padding', balloonPadding);
-                                                const paddingMatch = balloonPadding.match(/(\d+)px/);
-                                                if (paddingMatch && paddingMatch[1]) {
-                                                    const baseValue = parseInt(paddingMatch[1]);
-                                                    document.getElementById('balloonSizeRange').value = baseValue;
-                                                    document.getElementById('balloonSizeVal').textContent = balloonPadding;
-                                                }
-                                            }
-                                            break;
-                                        case 'labelSettings':
-                                            if (result.data) {
-                                                const settings = result.data;
-                                                showNameLabelsBrasil = settings.showNameLabelsBrasil || false;
-                                                showNameLabelsCeara = settings.showNameLabelsCeara || false;
-                                                showNameLabelsFortaleza = settings.showNameLabelsFortaleza || false;
-                                                showNumberLabelsBrasil = settings.showNumberLabelsBrasil !== undefined ? settings.showNumberLabelsBrasil : true;
-                                                showNumberLabelsCeara = settings.showNumberLabelsCeara !== undefined ? settings.showNumberLabelsCeara : true;
-                                                showNumberLabelsFortaleza = settings.showNumberLabelsFortaleza !== undefined ? settings.showNumberLabelsFortaleza : true;
-                                                silentLog(`Label settings carregados`);
-                                            }
-                                            break;
-                                        case 'autoCalculate': autoCalculate = result.data !== undefined ? result.data : true; break;
-                                        case 'autoBackup': autoBackup = result.data !== undefined ? result.data : true; break;
-                                        case 'advancedStats': advancedStats = result.data !== undefined ? result.data : true; break;
-                                        case 'importHistory': importHistory = Array.isArray(result.data) ? result.data : []; break;
-                                        case 'lastValidConfig': lastValidConfig = result.data || null; break;
-                                        case 'importMetadata': importMetadata = result.data || { lastImportTimestamp: null, importCount: 0, totalImportedItems: 0 }; break;
-                                        case 'versionHistory': versionHistory = Array.isArray(result.data) ? result.data : []; break;
-                                        case 'analysisCache': analysisCache = result.data || {}; break;
-                                        case 'featureToggles': featureToggles = result.data || { statisticalAnalysis: false, presentationMode: false }; break;
-                                        case 'theme': currentTheme = result.data || 'classic'; break;
-                                    }
-                                } else {
-                                    silentLog(`Nenhum dado encontrado para ${id}`, 'warning');
-                                }
-                                checkComplete();
-                            };
-                            
-                            request.onerror = () => {
-                                silentLog(`Erro ao carregar ${id}`, 'error');
-                                checkComplete();
-                            };
-                        } catch (e) {
-                            silentLog(`Exceção ao carregar ${id}: ${e}`, 'error');
-                            checkComplete();
-                        }
-                    });
-                    
-                } catch (error) {
-                    silentLog(`Erro na transação: ${error}`, 'error');
-                    resolve();
-                }
-            });
-            
-        } catch (error) {
-            silentLog(`Erro ao carregar do banco: ${error}`, 'error');
-            return Promise.resolve();
-        }
-    }
 
-    // Adicione esta função para diagnosticar problemas de salvamento
-    function diagnosticarBancoDados() {
-        console.group('🔍 Diagnóstico do Banco de Dados');
-        console.log('Dados atuais:');
-        console.log('- visitasEstados:', Object.keys(visitasEstados).length, 'itens', visitasEstados);
-        console.log('- visitasMunicipios:', Object.keys(visitasMunicipios).length, 'itens');
-        console.log('- visitasBairros:', Object.keys(visitasBairros).length, 'itens');
-        console.log('- dadosIDHBairros:', Object.keys(dadosIDHBairros).length, 'itens');
-        console.log('- dbInitialized:', dbInitialized);
-        console.log('- db:', db ? 'OK' : 'null');
-        console.log('- autoBackup:', autoBackup);
-        console.groupEnd();
-        
-        showToast('Diagnóstico concluído. Verifique o console (F12).', 'info');
-    }
+    // ==================== CONFIGURAÇÃO DO SUPABASE ====================
+    const supabaseUrl = 'https://jkamgpeiqouoepugrfzw.supabase.co';
+    const supabaseKey = 'sb_publishable_9UDSUIkrkCCEBwgUSEb0LA_eYZPmlu2';
+    const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-    // Adicione um botão no painel Admin para diagnóstico
-    // Coloque este código na função initializeAdminContainers ou no final do initMap
-    function adicionarBotaoDiagnostico() {
-        const ioPane = document.getElementById('io-pane');
-        if (ioPane) {
-            const btnDiv = document.createElement('div');
-            btnDiv.className = 'd-grid gap-2 mt-2';
-            btnDiv.innerHTML = `
-                <button class="btn btn-outline-secondary btn-sm" onclick="diagnosticarBancoDados()">
-                    <i class="fas fa-stethoscope me-1"></i> Diagnosticar Banco de Dados
-                </button>
-            `;
-            ioPane.appendChild(btnDiv);
-        }
-    }
-
-    
-    // Substitua a função saveToDatabase existente por esta versão melhorada
+    // Função para salvar dados globalmente no Supabase
     async function saveToDatabase() {
-        if (!dbInitialized) {
-            silentLog('Banco não inicializado, tentando abrir antes de salvar...', 'warning');
-            try {
-                await openDatabase();
-            } catch (e) {
-                silentLog('Falha ao abrir banco para salvar: ' + e, 'error');
-                showToast('Erro ao salvar: não foi possível abrir o banco de dados', 'error');
-                return;
-            }
-        }
-        
         showSavingIndicator(true);
         
-        // Criar uma promessa que resolve após um timeout para evitar travamentos
-        return new Promise(async (resolve) => {
-            try {
-                // Timeout de segurança
-                const timeout = setTimeout(() => {
-                    silentLog('Timeout ao salvar no banco', 'warning');
-                    showSavingIndicator(false);
-                    resolve();
-                }, 5000);
-                
-                const database = db;
-                const transaction = database.transaction([STORE_NAME], 'readwrite');
-                const store = transaction.objectStore(STORE_NAME);
-                
-                // Preparar todos os dados para salvar
-                const saves = [
-                    { id: 'visitasEstados', data: visitasEstados },
-                    { id: 'manualCoords', data: manualCoords },
-                    { id: 'visitasMunicipios', data: visitasMunicipios },
-                    { id: 'manualCoordsMunicipios', data: manualCoordsMunicipios },
-                    { id: 'visitasBairros', data: visitasBairros },
-                    { id: 'manualCoordsBairros', data: manualCoordsBairros },
-                    { id: 'dadosIDHBairros', data: dadosIDHBairros },
-                    { id: 'customBairrosData', data: customBairrosData },
-                    { id: 'estadosMetadata', data: estadosMetadata },
-                    { id: 'style', data: { size: labelFontSize, weight: labelFontWeight, color: labelFontColor, title: systemTitle, selectionBox: showSelectionBoxFortaleza, balloonPadding: balloonPadding } },
-                    { id: 'labelSettings', data: { showNameLabelsBrasil, showNameLabelsCeara, showNameLabelsFortaleza, showNumberLabelsBrasil, showNumberLabelsCeara, showNumberLabelsFortaleza } },
-                    { id: 'autoCalculate', data: autoCalculate },
-                    { id: 'autoBackup', data: autoBackup },
-                    { id: 'advancedStats', data: advancedStats },
-                    { id: 'importHistory', data: importHistory },
-                    { id: 'importMetadata', data: importMetadata },
-                    { id: 'versionHistory', data: versionHistory },
-                    { id: 'analysisCache', data: analysisCache },
-                    { id: 'featureToggles', data: featureToggles },
-                    { id: 'theme', data: currentTheme }
-                ];
-                
-                let savedCount = 0;
-                
-                saves.forEach(save => {
-                    try {
-                        const request = store.put({ id: save.id, data: save.data });
-                        request.onsuccess = () => {
-                            savedCount++;
-                            if (savedCount === saves.length) {
-                                silentLog('Todos os dados foram salvos individualmente', 'success');
-                            }
-                        };
-                        request.onerror = (e) => {
-                            silentLog(`Erro ao salvar ${save.id}: ${e.target.error}`, 'error');
-                        };
-                    } catch (e) {
-                        silentLog(`Exceção ao salvar ${save.id}: ${e}`, 'error');
-                    }
-                });
-                
-                // Salvar configuração atual como último backup válido
-                const currentConfig = {
-                    visitasEstados, manualCoords, visitasMunicipios, manualCoordsMunicipios,
-                    visitasBairros, manualCoordsBairros, dadosIDHBairros, customBairrosData,
-                    estadosMetadata, 
-                    style: { size: labelFontSize, weight: labelFontWeight, color: labelFontColor, title: systemTitle, selectionBox: showSelectionBoxFortaleza, balloonPadding: balloonPadding },
-                    labelSettings: { showNameLabelsBrasil, showNameLabelsCeara, showNameLabelsFortaleza, showNumberLabelsBrasil, showNumberLabelsCeara, showNumberLabelsFortaleza },
-                    autoCalculate, autoBackup, advancedStats,
-                    importMetadata,
-                    featureToggles,
-                    theme: currentTheme,
-                    timestamp: new Date().toISOString()
-                };
-                
-                try {
-                    store.put({ id: 'lastValidConfig', data: currentConfig });
-                } catch (e) {
-                    silentLog(`Erro ao salvar backup: ${e}`, 'error');
-                }
-                
-                transaction.oncomplete = () => {
-                    clearTimeout(timeout);
-                    silentLog('Transação de save concluída com sucesso', 'success');
-                    showSavingIndicator(false);
-                    resolve();
-                };
-                
-                transaction.onerror = (e) => {
-                    clearTimeout(timeout);
-                    silentLog(`Erro na transação de save: ${e.target.error}`, 'error');
-                    showSavingIndicator(false);
-                    showToast('Erro ao salvar no banco de dados', 'error');
-                    resolve();
-                };
-                
-            } catch (error) {
-                silentLog(`Erro crítico ao salvar: ${error}`, 'error');
-                showSavingIndicator(false);
-                showToast('Erro crítico ao salvar dados', 'error');
-                resolve();
+        const fullConfig = {
+            visitasEstados,
+            manualCoords,
+            visitasMunicipios,
+            manualCoordsMunicipios,
+            visitasBairros,
+            manualCoordsBairros,
+            dadosIDHBairros,
+            customBairrosData,
+            estadosMetadata,
+            style: { 
+                size: labelFontSize, 
+                weight: labelFontWeight, 
+                color: labelFontColor, 
+                title: systemTitle, 
+                selectionBox: showSelectionBoxFortaleza, 
+                balloonPadding: balloonPadding 
+            },
+            labelSettings: { 
+                showNameLabelsBrasil, 
+                showNameLabelsCeara, 
+                showNameLabelsFortaleza, 
+                showNumberLabelsBrasil, 
+                showNumberLabelsCeara, 
+                showNumberLabelsFortaleza 
+            },
+            autoCalculate,
+            autoBackup,
+            advancedStats,
+            importHistory,
+            importMetadata,
+            versionHistory,
+            analysisCache,
+            featureToggles,
+            theme: currentTheme,
+            timestamp: new Date().toISOString()
+        };
+
+        try {
+            const { error } = await _supabase
+                .from('app_config')
+                .upsert({ id: 'main_config', data: fullConfig });
+
+            if (error) {
+                console.error('Erro ao salvar no Supabase:', error);
+                showToast('Erro ao salvar globalmente', 'error');
+            } else {
+                silentLog('Dados salvos globalmente no Supabase!', 'success');
             }
-        });
+        } catch (e) {
+            console.error('Exceção ao salvar no Supabase:', e);
+        } finally {
+            showSavingIndicator(false);
+        }
     }
 
+    // Função para carregar dados globalmente do Supabase
+    async function loadFromDatabase() {
+        silentLog('Iniciando carregamento global do Supabase...');
+        try {
+            const { data, error } = await _supabase
+                .from('app_config')
+                .select('data')
+                .eq('id', 'main_config')
+                .single();
+
+            if (error) {
+                if (error.code === 'PGRST116') {
+                    silentLog('Nenhum dado global encontrado. Usando dados iniciais.', 'warning');
+                    // Inicializar com dados locais se o banco estiver vazio
+                    restoreFromBackup(INITIAL_DATA);
+                } else {
+                    console.error('Erro ao carregar do Supabase:', error);
+                    showToast('Erro ao carregar dados globais', 'error');
+                }
+                return;
+            }
+
+            if (data && data.data) {
+                const config = data.data;
+                
+                // Atribuição das variáveis globais
+                visitasEstados = config.visitasEstados || {};
+                manualCoords = config.manualCoords || {};
+                visitasMunicipios = config.visitasMunicipios || {};
+                manualCoordsMunicipios = config.manualCoordsMunicipios || {};
+                visitasBairros = config.visitasBairros || {};
+                manualCoordsBairros = config.manualCoordsBairros || {};
+                dadosIDHBairros = config.dadosIDHBairros || {};
+                customBairrosData = config.customBairrosData || { type: "FeatureCollection", features: [] };
+                estadosMetadata = config.estadosMetadata || {};
+                
+                if (config.style) {
+                    labelFontSize = config.style.size || 12;
+                    labelFontWeight = config.style.weight || 'bold';
+                    labelFontColor = config.style.color || '#333333';
+                    systemTitle = config.style.title || 'Cidade Mais Infância';
+                    showSelectionBoxFortaleza = config.style.selectionBox || false;
+                    balloonPadding = config.style.balloonPadding || '4px 8px';
+                }
+                
+                if (config.labelSettings) {
+                    showNameLabelsBrasil = config.labelSettings.showNameLabelsBrasil || false;
+                    showNameLabelsCeara = config.labelSettings.showNameLabelsCeara || false;
+                    showNameLabelsFortaleza = config.labelSettings.showNameLabelsFortaleza || false;
+                    showNumberLabelsBrasil = config.labelSettings.showNumberLabelsBrasil !== undefined ? config.labelSettings.showNumberLabelsBrasil : true;
+                    showNumberLabelsCeara = config.labelSettings.showNumberLabelsCeara !== undefined ? config.labelSettings.showNumberLabelsCeara : true;
+                    showNumberLabelsFortaleza = config.labelSettings.showNumberLabelsFortaleza !== undefined ? config.labelSettings.showNumberLabelsFortaleza : true;
+                }
+                
+                autoCalculate = config.autoCalculate !== undefined ? config.autoCalculate : true;
+                autoBackup = config.autoBackup !== undefined ? config.autoBackup : true;
+                advancedStats = config.advancedStats !== undefined ? config.advancedStats : true;
+                importHistory = config.importHistory || [];
+                importMetadata = config.importMetadata || { lastImportTimestamp: null, importCount: 0, totalImportedItems: 0 };
+                versionHistory = config.versionHistory || [];
+                analysisCache = config.analysisCache || {};
+                featureToggles = config.featureToggles || { statisticalAnalysis: false, presentationMode: false };
+                currentTheme = config.theme || 'classic';
+
+                silentLog('Dados globais carregados com sucesso!', 'success');
+            }
+        } catch (e) {
+            console.error('Exceção ao carregar do Supabase:', e);
+        }
+    }
     // ==================== FEATURE TOGGLES ====================
     function toggleStatisticalFeature(enabled) {
         featureToggles.statisticalAnalysis = enabled;
