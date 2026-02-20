@@ -15,8 +15,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
-        /* [MANTENHA TODO O CSS EXISTENTE AQUI - É MUITO EXTENSO PARA REPETIR] */
-        /* Por favor, copie todo o CSS da sua versão anterior para cá */
         :root {
             --primary-color: #007bff;
             --ceara-color: #ff4757;
@@ -1933,11 +1931,6 @@ MINAS GERAIS,1200,0.731'></textarea>
             </div>
 
             <div class="d-grid gap-2">
-                
-                <button class="btn btn-outline-danger btn-sm" onclick="generatePortfolioSnapshot()">
-                    <i class="fas fa-camera me-1"></i> Gerar Snapshot Portfólio
-                </button>
-
                 <button class="btn btn-outline-primary btn-sm" onclick="exportProfessionalPackage()">
                     <i class="fas fa-download me-1"></i> Exportar Pacote Completo
                 </button>
@@ -1949,6 +1942,11 @@ MINAS GERAIS,1200,0.731'></textarea>
                 </button>
                 <button class="btn btn-outline-warning btn-sm" onclick="exportAnalysisReport()">
                     <i class="fas fa-file-excel me-1"></i> Exportar Relatório de Análise
+                </button>
+                <hr>
+                <!-- NOVO BOTÃO: Gerar e copiar pacote de configuração inicial -->
+                <button class="btn btn-outline-info btn-sm" onclick="generateInitialDataPackage()">
+                    <i class="fas fa-clipboard-list me-1"></i> 📋 Copiar Configuração Inicial
                 </button>
             </div>
             <hr>
@@ -2073,36 +2071,15 @@ MINAS GERAIS,1200,0.731'></textarea>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-    
-    
-    // ==================== CARREGAMENTO DE DADOS EXTERNOS (PROFISSIONAL) ====================
-    async function loadInitialDataFromExternalDB() {
-        try {
-            const response = await fetch('db.json');
-            if (!response.ok) throw new Error('Arquivo db.json não encontrado');
-            const externalData = await response.json();
-            silentLog('Dados iniciais carregados do db.json com sucesso!', 'success');
-            return externalData;
-        } catch (error) {
-            silentLog('Usando base de dados local ou vazia: ' + error.message, 'info');
-            return null;
-        }
-    }
-
-    // ==================== SNAPSHOT DE DADOS PARA PORTFÓLIO ====================
-    // Para que outros vejam seus dados no GitHub:
-    // 1. Alimente o sistema localmente.
-    // 2. Use o botão "Gerar Snapshot para GitHub" no painel Admin.
-    // 3. Cole o resultado aqui dentro da variável PORTFOLIO_SNAPSHOT.
-     
-
     // ==================== CONSTANTES DO BANCO DE DADOS ====================
     const DB_NAME = 'CidadeMaisInfanciaDB';
-    const DB_VERSION = 22; // Versão atualizada
+    const DB_VERSION = 30; // Versão incrementada para garantir a atualização e evitar conflitos anteriores
     const STORE_NAME = 'configuracoes';
     
-    // ==================== DADOS INICIAIS VAZIOS ====================
-    // Começa completamente vazio, sem nenhum dado simulado
+    // ==================== DADOS INICIAIS - SERÃO POPULADOS PELO ADMIN ====================
+    // ATENÇÃO ADMIN: Para fixar sua configuração, configure tudo no sistema,
+    // depois clique em "📋 Copiar Configuração Inicial" na aba Importar/Exportar
+    // e cole o resultado AQUI, substituindo o objeto vazio abaixo.
     const INITIAL_DATA = {
         visitasEstados: {},
         manualCoords: {},
@@ -2113,17 +2090,24 @@ MINAS GERAIS,1200,0.731'></textarea>
         dadosIDHBairros: {},
         customBairrosData: { type: "FeatureCollection", features: [] },
         estadosMetadata: {},
-        style: { size: 12, weight: 'bold', color: '#333333', title: 'Monitoramento de Visitas', selectionBox: false, balloonPadding: '4px 8px' },
+        style: { size: 12, weight: 'bold', color: '#333333', title: 'Cidade Mais Infância', selectionBox: false, balloonPadding: '4px 8px' },
         labelSettings: { showNameLabelsBrasil: false, showNameLabelsCeara: false, showNameLabelsFortaleza: false, showNumberLabelsBrasil: true, showNumberLabelsCeara: true, showNumberLabelsFortaleza: true },
         autoCalculate: true,
         autoBackup: true,
         advancedStats: true,
         importHistory: [],
         lastValidConfig: null,
-        importMetadata: { lastImportTimestamp: null, importCount: 0, totalImportedItems: 0 },
+        importMetadata: {
+            lastImportTimestamp: null,
+            importCount: 0,
+            totalImportedItems: 0
+        },
         versionHistory: [],
         analysisCache: {},
-        featureToggles: { statisticalAnalysis: false, presentationMode: false },
+        featureToggles: {
+            statisticalAnalysis: false,
+            presentationMode: false
+        },
         theme: 'classic'
     };
 
@@ -2131,8 +2115,15 @@ MINAS GERAIS,1200,0.731'></textarea>
     let visitasEstados = {}, manualCoords = {}, visitasMunicipios = {}, manualCoordsMunicipios = {}, 
         visitasBairros = {}, manualCoordsBairros = {}, dadosIDHBairros = {}, customBairrosData = { type: "FeatureCollection", features: [] }, 
         estadosMetadata = {}, importMetadata = { lastImportTimestamp: null, importCount: 0, totalImportedItems: 0 },
-        versionHistory = [], analysisCache = {}, featureToggles = { statisticalAnalysis: false, presentationMode: false },
+        _versionHistory = [], analysisCache = {}, featureToggles = { statisticalAnalysis: false, presentationMode: false },
         currentTheme = 'classic';
+    
+    // Getter/Setter para versionHistory para garantir que seja sempre um array
+    Object.defineProperty(window, 'versionHistory', {
+        get: function() { return Array.isArray(_versionHistory) ? _versionHistory : []; },
+        set: function(val) { _versionHistory = Array.isArray(val) ? val : []; },
+        configurable: true
+    });
     
     let currentLevel = 'brasil', adminLevel = 'brasil', currentDetailItem = null, currentViewMode = 'visitas';
     let isPresentationMode = false;
@@ -2141,7 +2132,7 @@ MINAS GERAIS,1200,0.731'></textarea>
     let showNameLabelsBrasil = false, showNameLabelsCeara = false, showNameLabelsFortaleza = false;
     let showNumberLabelsBrasil = true, showNumberLabelsCeara = true, showNumberLabelsFortaleza = true;
     let showSelectionBoxFortaleza = false, selectedItems = new Set();
-    let labelFontSize = 12, labelFontWeight = 'bold', labelFontColor = '#333333', systemTitle = 'Monitoramento de Visitas', 
+    let labelFontSize = 12, labelFontWeight = 'bold', labelFontColor = '#333333', systemTitle = 'Cidade Mais Infância', 
         balloonPadding = '4px 8px', activeFilter = null, autoCalculate = true, autoBackup = true, advancedStats = true;
     
     let pendingImportData = null;
@@ -2237,13 +2228,12 @@ MINAS GERAIS,1200,0.731'></textarea>
     }
     
     // ==================== FUNÇÕES DE BANCO DE DADOS ====================
-    
-    // ==================== FUNÇÕES DE BANCO DE DADOS ====================
     function openDatabase() {
         silentLog('Abrindo banco de dados...');
         return new Promise((resolve, reject) => {
             try {
                 if (db && dbInitialized) {
+                    silentLog('Banco já está aberto', 'success');
                     resolve(db);
                     return;
                 }
@@ -2251,119 +2241,110 @@ MINAS GERAIS,1200,0.731'></textarea>
                 const request = indexedDB.open(DB_NAME, DB_VERSION);
                 
                 request.onerror = (event) => {
-                    silentLog(`Erro ao abrir IndexedDB: ${event.target.error}`, 'error');
-                    reject(event.target.error);
+                    const error = event.target.error;
+                    silentLog(`Erro ao abrir IndexedDB: ${error}`, 'error');
+                    
+                    // Se o erro for de versão (requested version is less than existing version)
+                    // Tentamos abrir com a versão existente ou forçar um reset
+                    if (error.name === 'VersionError') {
+                        silentLog('Detectado erro de versão. Tentando recuperar...', 'warning');
+                        const retryRequest = indexedDB.open(DB_NAME);
+                        retryRequest.onsuccess = (e) => {
+                            const currentDB = e.target.result;
+                            const currentVersion = currentDB.version;
+                            currentDB.close();
+                            silentLog(`Versão atual no navegador: ${currentVersion}. Reiniciando com versão superior.`, 'info');
+                            const finalRequest = indexedDB.open(DB_NAME, Math.max(currentVersion + 1, DB_VERSION + 1));
+                            finalRequest.onsuccess = (fe) => {
+                                db = fe.target.result;
+                                dbInitialized = true;
+                                resolve(db);
+                            };
+                            finalRequest.onupgradeneeded = request.onupgradeneeded;
+                        };
+                        retryRequest.onerror = () => {
+                            silentLog('Falha ao recuperar versão. Deletando banco para resetar...', 'error');
+                            indexedDB.deleteDatabase(DB_NAME);
+                            location.reload();
+                        };
+                    } else {
+                        reject(error);
+                    }
                 };
                 
                 request.onsuccess = (event) => {
+                    silentLog('IndexedDB aberto com sucesso', 'success');
                     db = event.target.result;
                     dbInitialized = true;
                     resolve(db);
                 };
                 
                 request.onupgradeneeded = (event) => {
+                    silentLog(`Atualizando banco de dados... Versão: ${event.oldVersion} -> ${event.newVersion}`);
                     const dbRef = event.target.result;
+                    
                     if (!dbRef.objectStoreNames.contains(STORE_NAME)) {
                         const store = dbRef.createObjectStore(STORE_NAME, { keyPath: 'id' });
                         store.createIndex('id', 'id', { unique: true });
+                        silentLog('Store criada com sucesso');
+                    }
+                    
+                    // Se for uma atualização (primeira carga ou versão nova), podemos pré-popular com INITIAL_DATA
+                    // Isso garante que, mesmo que o loadFromDatabase falhe, o banco tenha a estrutura correta.
+                    if (event.oldVersion < DB_VERSION) {
+                        silentLog('Populando banco com dados iniciais devido à atualização de versão.');
+                        const transaction = event.target.transaction;
+                        const store = transaction.objectStore(STORE_NAME);
                         
-                        // Dados iniciais realmente vazios
-                        const initialData = [
-                            { id: 'visitasEstados', data: {} },
-                            { id: 'manualCoords', data: {} },
-                            { id: 'visitasMunicipios', data: {} },
-                            { id: 'manualCoordsMunicipios', data: {} },
-                            { id: 'visitasBairros', data: {} },
-                            { id: 'manualCoordsBairros', data: {} },
-                            { id: 'dadosIDHBairros', data: {} },
-                            { id: 'customBairrosData', data: { type: "FeatureCollection", features: [] } },
-                            { id: 'estadosMetadata', data: {} },
-                            { id: 'style', data: { size: 12, weight: 'bold', color: '#333333', title: 'Monitoramento de Visitas', selectionBox: false, balloonPadding: '4px 8px' } },
-                            { id: 'labelSettings', data: { showNameLabelsBrasil: false, showNameLabelsCeara: false, showNameLabelsFortaleza: false, showNumberLabelsBrasil: true, showNumberLabelsCeara: true, showNumberLabelsFortaleza: true } },
-                            { id: 'autoCalculate', data: true },
-                            { id: 'autoBackup', data: true },
-                            { id: 'advancedStats', data: true },
-                            { id: 'importHistory', data: [] },
-                            { id: 'lastValidConfig', data: null },
-                            { id: 'importMetadata', data: { lastImportTimestamp: null, importCount: 0, totalImportedItems: 0 } },
-                            { id: 'versionHistory', data: [] },
-                            { id: 'analysisCache', data: {} },
-                            { id: 'featureToggles', data: { statisticalAnalysis: false, presentationMode: false } },
-                            { id: 'theme', data: 'classic' }
-                        ];
+                        // Função auxiliar para colocar dados
+                        const putData = (id, data) => {
+                            try {
+                                store.put({ id, data });
+                            } catch (e) {
+                                silentLog(`Erro ao salvar dado inicial ${id}: ${e}`, 'error');
+                            }
+                        };
                         
-                        initialData.forEach(item => store.put(item));
+                        // Inserir todos os dados iniciais
+                        putData('visitasEstados', INITIAL_DATA.visitasEstados);
+                        putData('manualCoords', INITIAL_DATA.manualCoords);
+                        putData('visitasMunicipios', INITIAL_DATA.visitasMunicipios);
+                        putData('manualCoordsMunicipios', INITIAL_DATA.manualCoordsMunicipios);
+                        putData('visitasBairros', INITIAL_DATA.visitasBairros);
+                        putData('manualCoordsBairros', INITIAL_DATA.manualCoordsBairros);
+                        putData('dadosIDHBairros', INITIAL_DATA.dadosIDHBairros);
+                        putData('customBairrosData', INITIAL_DATA.customBairrosData);
+                        putData('estadosMetadata', INITIAL_DATA.estadosMetadata);
+                        putData('style', INITIAL_DATA.style);
+                        putData('labelSettings', INITIAL_DATA.labelSettings);
+                        putData('autoCalculate', INITIAL_DATA.autoCalculate);
+                        putData('autoBackup', INITIAL_DATA.autoBackup);
+                        putData('advancedStats', INITIAL_DATA.advancedStats);
+                        putData('importHistory', INITIAL_DATA.importHistory);
+                        putData('lastValidConfig', INITIAL_DATA.lastValidConfig);
+                        putData('importMetadata', INITIAL_DATA.importMetadata);
+                        putData('versionHistory', INITIAL_DATA.versionHistory);
+                        putData('analysisCache', INITIAL_DATA.analysisCache);
+                        putData('featureToggles', INITIAL_DATA.featureToggles);
+                        putData('theme', INITIAL_DATA.theme);
+                        
+                        silentLog('Dados iniciais inseridos no banco durante o upgrade.', 'success');
                     }
                 };
             } catch (error) {
+                silentLog(`Erro crítico no IndexedDB: ${error}`, 'error');
                 reject(error);
             }
         });
     }
-
-    // Função para limpar tudo e começar do zero (apenas se o usuário solicitar)
-    async function resetToEmpty() {
-        if (!confirm("Isso apagará TODOS os dados alimentados. Tem certeza?")) return;
-        
-        const database = await openDatabase();
-        const transaction = database.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        store.clear();
-        
-        localStorage.clear();
-        location.reload();
-    }
-
-    
-    function isDatabaseEmpty(database) {
-        return new Promise((resolve) => {
-            const transaction = database.transaction([STORE_NAME], 'readonly');
-            const store = transaction.objectStore(STORE_NAME);
-            const request = store.get('visitasEstados');
-            request.onsuccess = (e) => {
-                const res = e.target.result;
-                resolve(!res || Object.keys(res.data || {}).length === 0);
-            };
-            request.onerror = () => resolve(true);
-        });
-    }
-
-    async function hydrateFromSnapshot(snapshot) {
-        const database = await openDatabase();
-        const transaction = database.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        
-        for (const key in snapshot) {
-            store.put({ id: key, data: snapshot[key] });
-        }
-        
-        return new Promise((resolve) => {
-            transaction.oncomplete = () => {
-                silentLog('Sistema inicializado com os dados do portfólio!', 'success');
-                resolve();
-            };
-        });
-    }
-
-    
     
     async function loadFromDatabase() {
         silentLog('Iniciando carregamento do banco de dados...');
         try {
             const database = await openDatabase();
-            const isEmpty = await isDatabaseEmpty(database);
+            silentLog('Banco aberto, iniciando transação de leitura');
             
-            if (isEmpty) {
-                const externalSnapshot = await loadInitialDataFromExternalDB();
-                if (externalSnapshot) {
-                    silentLog('Banco vazio detectado. Sincronizando com db.json...', 'info');
-                    await hydrateFromSnapshot(externalSnapshot);
-                }
-            }
-
             return new Promise((resolve) => {
-
-
                 try {
                     const transaction = database.transaction([STORE_NAME], 'readonly');
                     const store = transaction.objectStore(STORE_NAME);
@@ -2382,6 +2363,56 @@ MINAS GERAIS,1200,0.731'></textarea>
                         pending--;
                         if (pending === 0) {
                             silentLog('Todos os dados carregados do banco', 'success');
+                            // Após carregar, garantir que as estruturas estejam ok (deep merge com INITIAL_DATA para objetos aninhados)
+                            // Isso previne que um campo novo adicionado no INITIAL_DATA fique faltando.
+                            silentLog('Aplicando merge profundo com dados iniciais para garantir integridade...');
+                            
+                            // Função de merge simples para objetos (deep merge)
+                            function deepMerge(target, source) {
+                                if (typeof target !== 'object' || target === null) return source;
+                                if (typeof source !== 'object' || source === null) return target;
+                                
+                                const output = { ...target };
+                                for (const key in source) {
+                                    if (source.hasOwnProperty(key)) {
+                                        if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])) {
+                                            output[key] = deepMerge(target[key], source[key]);
+                                        } else if (target[key] === undefined) {
+                                            output[key] = source[key];
+                                        }
+                                    }
+                                }
+                                return output;
+                            }
+                            
+                            // Aplicar merge para garantir que todas as propriedades do INITIAL_DATA existam
+                            visitasEstados = deepMerge(visitasEstados, INITIAL_DATA.visitasEstados);
+                            manualCoords = deepMerge(manualCoords, INITIAL_DATA.manualCoords);
+                            visitasMunicipios = deepMerge(visitasMunicipios, INITIAL_DATA.visitasMunicipios);
+                            manualCoordsMunicipios = deepMerge(manualCoordsMunicipios, INITIAL_DATA.manualCoordsMunicipios);
+                            visitasBairros = deepMerge(visitasBairros, INITIAL_DATA.visitasBairros);
+                            manualCoordsBairros = deepMerge(manualCoordsBairros, INITIAL_DATA.manualCoordsBairros);
+                            dadosIDHBairros = deepMerge(dadosIDHBairros, INITIAL_DATA.dadosIDHBairros);
+                            customBairrosData = deepMerge(customBairrosData, INITIAL_DATA.customBairrosData);
+                            estadosMetadata = deepMerge(estadosMetadata, INITIAL_DATA.estadosMetadata);
+                            importMetadata = deepMerge(importMetadata, INITIAL_DATA.importMetadata);
+                            versionHistory = Array.isArray(versionHistory) ? versionHistory : (Array.isArray(_versionHistory) ? _versionHistory : []);
+                            analysisCache = deepMerge(analysisCache, INITIAL_DATA.analysisCache);
+                            featureToggles = deepMerge(featureToggles, INITIAL_DATA.featureToggles);
+                            
+                            // Para configurações simples, garantir que tenham valores válidos
+                            labelFontSize = labelFontSize || INITIAL_DATA.style.size;
+                            labelFontWeight = labelFontWeight || INITIAL_DATA.style.weight;
+                            labelFontColor = labelFontColor || INITIAL_DATA.style.color;
+                            systemTitle = systemTitle || INITIAL_DATA.style.title;
+                            balloonPadding = balloonPadding || INITIAL_DATA.style.balloonPadding;
+                            
+                            autoCalculate = (autoCalculate !== undefined && autoCalculate !== null) ? autoCalculate : INITIAL_DATA.autoCalculate;
+                            autoBackup = (autoBackup !== undefined && autoBackup !== null) ? autoBackup : INITIAL_DATA.autoBackup;
+                            advancedStats = (advancedStats !== undefined && advancedStats !== null) ? advancedStats : INITIAL_DATA.advancedStats;
+                            currentTheme = currentTheme || INITIAL_DATA.theme;
+                            
+                            silentLog('Merge concluído', 'success');
                             resolve();
                         }
                     }
@@ -2395,53 +2426,60 @@ MINAS GERAIS,1200,0.731'></textarea>
                                 if (result && result.data !== undefined) {
                                     silentLog(`Carregado: ${id}`);
                                     switch(id) {
-                                        case 'visitasEstados': visitasEstados = result.data || {}; break;
-                                        case 'manualCoords': manualCoords = result.data || {}; break;
-                                        case 'visitasMunicipios': visitasMunicipios = result.data || {}; break;
-                                        case 'manualCoordsMunicipios': manualCoordsMunicipios = result.data || {}; break;
-                                        case 'visitasBairros': visitasBairros = result.data || {}; break;
-                                        case 'manualCoordsBairros': manualCoordsBairros = result.data || {}; break;
-                                        case 'dadosIDHBairros': dadosIDHBairros = result.data || {}; break;
-                                        case 'customBairrosData': customBairrosData = result.data || { type: "FeatureCollection", features: [] }; break;
-                                        case 'estadosMetadata': estadosMetadata = result.data || {}; break;
+                                        case 'visitasEstados': visitasEstados = result.data; break;
+                                        case 'manualCoords': manualCoords = result.data; break;
+                                        case 'visitasMunicipios': visitasMunicipios = result.data; break;
+                                        case 'manualCoordsMunicipios': manualCoordsMunicipios = result.data; break;
+                                        case 'visitasBairros': visitasBairros = result.data; break;
+                                        case 'manualCoordsBairros': manualCoordsBairros = result.data; break;
+                                        case 'dadosIDHBairros': dadosIDHBairros = result.data; break;
+                                        case 'customBairrosData': customBairrosData = result.data; break;
+                                        case 'estadosMetadata': estadosMetadata = result.data; break;
                                         case 'style': 
                                             if (result.data) {
                                                 const style = result.data;
-                                                labelFontSize = style.size || 12;
-                                                labelFontWeight = style.weight || 'bold';
-                                                labelFontColor = style.color || '#333333';
-                                                systemTitle = style.title || 'Monitoramento de Visitas';
-                                                showSelectionBoxFortaleza = style.selectionBox || false;
+                                                labelFontSize = style.size;
+                                                labelFontWeight = style.weight;
+                                                labelFontColor = style.color;
+                                                systemTitle = style.title;
+                                                showSelectionBoxFortaleza = style.selectionBox;
                                                 balloonPadding = style.balloonPadding || '4px 8px';
+                                                silentLog(`Estilo carregado: size=${labelFontSize}, weight=${labelFontWeight}, color=${labelFontColor}, balloonPadding=${balloonPadding}`);
                                                 
                                                 document.documentElement.style.setProperty('--label-padding', balloonPadding);
+                                                const paddingMatch = balloonPadding.match(/(\d+)px/);
+                                                if (paddingMatch && paddingMatch[1]) {
+                                                    const baseValue = parseInt(paddingMatch[1]);
+                                                    document.getElementById('balloonSizeRange').value = baseValue;
+                                                    document.getElementById('balloonSizeVal').textContent = balloonPadding;
+                                                }
                                             }
                                             break;
                                         case 'labelSettings':
                                             if (result.data) {
                                                 const settings = result.data;
-                                                showNameLabelsBrasil = settings.showNameLabelsBrasil || false;
-                                                showNameLabelsCeara = settings.showNameLabelsCeara || false;
-                                                showNameLabelsFortaleza = settings.showNameLabelsFortaleza || false;
-                                                showNumberLabelsBrasil = settings.showNumberLabelsBrasil !== undefined ? settings.showNumberLabelsBrasil : true;
-                                                showNumberLabelsCeara = settings.showNumberLabelsCeara !== undefined ? settings.showNumberLabelsCeara : true;
-                                                showNumberLabelsFortaleza = settings.showNumberLabelsFortaleza !== undefined ? settings.showNumberLabelsFortaleza : true;
+                                                showNameLabelsBrasil = settings.showNameLabelsBrasil;
+                                                showNameLabelsCeara = settings.showNameLabelsCeara;
+                                                showNameLabelsFortaleza = settings.showNameLabelsFortaleza;
+                                                showNumberLabelsBrasil = settings.showNumberLabelsBrasil;
+                                                showNumberLabelsCeara = settings.showNumberLabelsCeara;
+                                                showNumberLabelsFortaleza = settings.showNumberLabelsFortaleza;
+                                                silentLog(`Label settings carregados`);
                                             }
                                             break;
-                                        case 'autoCalculate': autoCalculate = result.data !== undefined ? result.data : true; break;
-                                        case 'autoBackup': autoBackup = result.data !== undefined ? result.data : true; break;
-                                        case 'advancedStats': advancedStats = result.data !== undefined ? result.data : true; break;
-                                        case 'importHistory': importHistory = result.data || []; break;
-                                        case 'lastValidConfig': lastValidConfig = result.data || null; break;
-                                        case 'importMetadata': importMetadata = result.data || { lastImportTimestamp: null, importCount: 0, totalImportedItems: 0 }; break;
-                                        case 'versionHistory': versionHistory = result.data || []; break;
-                                        case 'analysisCache': analysisCache = result.data || {}; break;
-                                        case 'featureToggles': featureToggles = result.data || { statisticalAnalysis: false, presentationMode: false }; break;
-                                        case 'theme': currentTheme = result.data || 'classic'; break;
+                                        case 'autoCalculate': autoCalculate = result.data; break;
+                                        case 'autoBackup': autoBackup = result.data; break;
+                                        case 'advancedStats': advancedStats = result.data; break;
+                                        case 'importHistory': importHistory = result.data; break;
+                                        case 'lastValidConfig': lastValidConfig = result.data; break;
+                                        case 'importMetadata': importMetadata = result.data; break;
+                                        case 'versionHistory': versionHistory = result.data; break;
+                                        case 'analysisCache': analysisCache = result.data; break;
+                                        case 'featureToggles': featureToggles = result.data; break;
+                                        case 'theme': currentTheme = result.data; break;
                                     }
                                 } else {
-                                    silentLog(`Nenhum dado encontrado para ${id}, usando padrão vazio`, 'warning');
-                                    // Usamos padrão vazio, nunca dados simulados
+                                    silentLog(`Nenhum dado encontrado para ${id}`, 'warning');
                                 }
                                 checkComplete();
                             };
@@ -2468,23 +2506,20 @@ MINAS GERAIS,1200,0.731'></textarea>
         }
     }
     
-    
-    // Redundância LocalStorage para garantir que não 'esqueça' o estado entre recarregamentos de cache agressivo
-    function syncToLocalStorage() {
-        const minimalState = {
-            hasData: Object.keys(visitasEstados).length > 0 || Object.keys(visitasMunicipios).length > 0 || Object.keys(visitasBairros).length > 0
-        };
-        localStorage.setItem('cmi_system_state', JSON.stringify(minimalState));
-    }
-
     async function saveToDatabase() {
-        if (window._isSaving) return Promise.resolve();
-        window._isSaving = true;
-
+        if (!dbInitialized) {
+            silentLog('Banco não inicializado, tentando abrir antes de salvar...', 'warning');
+            try {
+                await openDatabase();
+            } catch (e) {
+                silentLog('Falha ao abrir banco para salvar: ' + e, 'error');
+                return;
+            }
+        }
+        
         showSavingIndicator(true);
         try {
-            const database = await openDatabase();
-            
+            const database = db; 
             return new Promise((resolve) => {
                 try {
                     const transaction = database.transaction([STORE_NAME], 'readwrite');
@@ -2541,17 +2576,14 @@ MINAS GERAIS,1200,0.731'></textarea>
                     }
                     
                     transaction.oncomplete = () => {
-                        syncToLocalStorage();
                         silentLog('Todos os dados salvos com sucesso', 'success');
                         showSavingIndicator(false);
-                        window._isSaving = false;
                         resolve();
                     };
                     
                     transaction.onerror = (e) => {
                         silentLog(`Erro na transação de save: ${e}`, 'error');
                         showSavingIndicator(false);
-                        window._isSaving = false;
                         resolve();
                     };
                     
@@ -2565,7 +2597,6 @@ MINAS GERAIS,1200,0.731'></textarea>
         } catch (error) {
             silentLog(`Erro ao abrir banco para salvar: ${error}`, 'error');
             showSavingIndicator(false);
-            window._isSaving = false;
             return Promise.resolve();
         }
     }
@@ -2690,7 +2721,8 @@ MINAS GERAIS,1200,0.731'></textarea>
         const list = document.getElementById('version-list'); 
         if (!list) return; 
         
-        if (versionHistory.length === 0) {
+        if (!Array.isArray(versionHistory) || versionHistory.length === 0) {
+            versionHistory = Array.isArray(versionHistory) ? versionHistory : [];
             list.innerHTML = '<div class="text-center text-muted p-3">Nenhum histórico disponível</div>';
             return;
         }
@@ -2886,30 +2918,6 @@ MINAS GERAIS,1200,0.731'></textarea>
         const errors = [];
         
         try {
-            // Suporte para pacote completo importado como nível específico
-            if (data.metadata && data.metadata.version) {
-                if (targetLevel === 'brasil' && data.brasil && data.brasil.visitas) {
-                    Object.entries(data.brasil.visitas).forEach(([key, value]) => {
-                        items.push({ nome: key, visitas: parseInt(value) || 0, idh: null });
-                    });
-                } else if (targetLevel === 'ceara' && data.ceara && data.ceara.visitas) {
-                    Object.entries(data.ceara.visitas).forEach(([key, value]) => {
-                        items.push({ nome: key, visitas: parseInt(value) || 0, idh: null });
-                    });
-                } else if (targetLevel === 'fortaleza' && data.fortaleza && data.fortaleza.visitas) {
-                    Object.entries(data.fortaleza.visitas).forEach(([key, value]) => {
-                        items.push({ 
-                            nome: key, 
-                            visitas: parseInt(value) || 0, 
-                            idh: data.fortaleza.idh && data.fortaleza.idh[key] ? data.fortaleza.idh[key] : 
-                                 (data.fortaleza.visitasIDH && data.fortaleza.visitasIDH[key] ? data.fortaleza.visitasIDH[key] : null)
-                        });
-                    });
-                }
-                
-                if (items.length > 0) return { items, warnings, errors };
-            }
-
             if (data.brasil && data.brasil.visitas && targetLevel === 'brasil') {
                 Object.entries(data.brasil.visitas).forEach(([key, value]) => {
                     items.push({
@@ -2933,8 +2941,7 @@ MINAS GERAIS,1200,0.731'></textarea>
                     items.push({
                         nome: key,
                         visitas: parseInt(value) || 0,
-                        idh: data.fortaleza.idh && data.fortaleza.idh[key] ? data.fortaleza.idh[key] : 
-                             (data.fortaleza.visitasIDH && data.fortaleza.visitasIDH[key] ? data.fortaleza.visitasIDH[key] : null)
+                        idh: data.fortaleza.idh && data.fortaleza.idh[key] ? data.fortaleza.idh[key] : null
                     });
                 });
             }
@@ -3341,8 +3348,7 @@ MINAS GERAIS,1200,0.731'></textarea>
         updateRanking();
         
         saveToDatabase().then(() => {
-            silentLog(`Importação concluída e salva localmente! ${importedCount} novos, ${updatedCount} atualizados, ${skippedCount} ignorados.`, 'success');
-            showToast('Dados importados e salvos com sucesso!', 'success');
+            silentLog(`Importação concluída! ${importedCount} novos, ${updatedCount} atualizados, ${skippedCount} ignorados.`, 'success');
             
             const lastImportSpan = document.getElementById('lastImportTimestamp');
             if (lastImportSpan) {
@@ -3408,37 +3414,6 @@ MINAS GERAIS,1200,0.731'></textarea>
         silentLog('Pacote completo exportado com sucesso!', "success");
     }
 
-    
-    async function generatePortfolioSnapshot() {
-        const database = await openDatabase();
-        const transaction = database.transaction([STORE_NAME], 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-        const ids = [
-            'visitasEstados', 'visitasMunicipios', 'visitasBairros', 
-            'manualCoords', 'manualCoordsMunicipios', 'manualCoordsBairros',
-            'dadosIDHBairros', 'customBairrosData', 'estadosMetadata', 'style', 
-            'labelSettings', 'theme', 'featureToggles'
-        ];
-        
-        let snapshot = {};
-        let count = 0;
-        
-        ids.forEach(id => {
-            const req = store.get(id);
-            req.onsuccess = (e) => {
-                if (e.target.result) snapshot[id] = e.target.result.data;
-                count++;
-                if (count === ids.length) {
-                    const blob = new Blob([JSON.stringify(snapshot, null, 2)], {type: 'application/json'});
-                    const url = URL.createObjectURL(blob);
-                    const win = window.open();
-                    win.document.write('<h3>Snapshot Gerado!</h3><p>Substitua o conteúdo do seu arquivo <b>db.json</b> pelo código abaixo para atualizar o portfólio:</p><pre>' + JSON.stringify(snapshot, null, 2) + '</pre>');
-                    silentLog('Snapshot gerado com sucesso!', 'success');
-                }
-            };
-        });
-    }
-
     function exportConfigProfessional() {
         const config = {
             visitasEstados,
@@ -3483,16 +3458,6 @@ MINAS GERAIS,1200,0.731'></textarea>
                 });
             }
             
-            if (config.brasil && config.brasil.visitas) visitasEstados = config.brasil.visitas;
-            if (config.brasil && config.brasil.coords) manualCoords = config.brasil.coords;
-            if (config.ceara && config.ceara.visitas) visitasMunicipios = config.ceara.visitas;
-            if (config.ceara && config.ceara.coords) manualCoordsMunicipios = config.ceara.coords;
-            if (config.fortaleza && config.fortaleza.visitas) visitasBairros = config.fortaleza.visitas;
-            if (config.fortaleza && config.fortaleza.coords) manualCoordsBairros = config.fortaleza.coords;
-            if (config.fortaleza && (config.fortaleza.idh || config.fortaleza.visitasIDH)) {
-                dadosIDHBairros = config.fortaleza.idh || config.fortaleza.visitasIDH;
-            }
-            
             if (config.visitasEstados) visitasEstados = config.visitasEstados;
             if (config.manualCoords) manualCoords = config.manualCoords;
             if (config.visitasMunicipios) visitasMunicipios = config.visitasMunicipios;
@@ -3500,30 +3465,25 @@ MINAS GERAIS,1200,0.731'></textarea>
             if (config.visitasBairros) visitasBairros = config.visitasBairros;
             if (config.manualCoordsBairros) manualCoordsBairros = config.manualCoordsBairros;
             if (config.dadosIDHBairros) dadosIDHBairros = config.dadosIDHBairros;
-            
             if (config.customBairrosData) customBairrosData = config.customBairrosData;
             if (config.estadosMetadata) estadosMetadata = config.estadosMetadata;
             if (config.importMetadata) importMetadata = config.importMetadata;
             if (config.featureToggles) featureToggles = config.featureToggles;
+            if (config.theme) currentTheme = config.theme;
             
-            const themeToApply = config.theme || (config.metadata && config.metadata.theme) || currentTheme;
-            currentTheme = themeToApply;
-
-            const styleData = config.style || (config.metadata && config.metadata.style);
-            if (styleData) { 
-                labelFontSize = styleData.size || 12; 
-                labelFontWeight = styleData.weight || 'bold'; 
-                labelFontColor = styleData.color || '#333'; 
-                systemTitle = styleData.title || (config.metadata && config.metadata.systemTitle) || 'Monitoramento de Visitas'; 
-                showSelectionBoxFortaleza = styleData.selectionBox || false; 
-                balloonPadding = styleData.balloonPadding || '4px 8px';
+            if (config.style) { 
+                labelFontSize = config.style.size || 12; 
+                labelFontWeight = config.style.weight || 'bold'; 
+                labelFontColor = config.style.color || '#333'; 
+                systemTitle = config.style.title || 'Monitoramento de Visitas'; 
+                showSelectionBoxFortaleza = config.style.selectionBox || false; 
+                balloonPadding = config.style.balloonPadding || '4px 8px';
                 
                 document.documentElement.style.setProperty('--label-padding', balloonPadding);
                 const paddingMatch = balloonPadding.match(/(\d+)px/);
                 if (paddingMatch && paddingMatch[1]) {
-                    const baseValue = parseInt(paddingMatch[1]);
-                    if (document.getElementById('balloonSizeRange')) document.getElementById('balloonSizeRange').value = baseValue;
-                    if (document.getElementById('balloonSizeVal')) document.getElementById('balloonSizeVal').textContent = balloonPadding;
+                    document.getElementById('balloonSizeRange').value = parseInt(paddingMatch[1]);
+                    document.getElementById('balloonSizeVal').textContent = balloonPadding;
                 }
             }
             
@@ -3538,15 +3498,17 @@ MINAS GERAIS,1200,0.731'></textarea>
             
             if (config.autoCalculate !== undefined) { 
                 autoCalculate = config.autoCalculate; 
-                if (document.getElementById('toggleAutoCalculate')) document.getElementById('toggleAutoCalculate').checked = autoCalculate; 
+                document.getElementById('toggleAutoCalculate').checked = autoCalculate; 
             }
             
             if (config.autoBackup !== undefined) {
                 autoBackup = config.autoBackup;
-                if (document.getElementById('toggleAutoBackup')) document.getElementById('toggleAutoBackup').checked = autoBackup;
+                document.getElementById('toggleAutoBackup').checked = autoBackup;
             }
             
-            changeTheme(currentTheme);
+            if (config.theme) {
+                changeTheme(config.theme);
+            }
             
             if (document.getElementById('featureStatisticalAnalysis')) {
                 document.getElementById('featureStatisticalAnalysis').checked = featureToggles.statisticalAnalysis;
@@ -3565,16 +3527,12 @@ MINAS GERAIS,1200,0.731'></textarea>
             updateSidebarTable();
             if (isPresentationMode) updatePresentationCard();
             updateRanking();
-            
-            saveToDatabase().then(() => {
-                addToVersionHistory('Importação', 'Configuração completa importada');
-                silentLog('Configurações importadas e salvas com sucesso!', "success");
-                showToast('Configurações importadas e salvas!', 'success');
-            });
+            saveToDatabase();
+            addToVersionHistory('Importação', 'Configuração completa importada');
+            silentLog('Configurações importadas com sucesso!', "success");
             
         } catch (e) { 
             silentLog('Erro no JSON: ' + e.message, "error"); 
-            showToast('Erro ao importar JSON: ' + e.message, 'error');
         }
     }
 
@@ -4036,6 +3994,46 @@ MINAS GERAIS,1200,0.731'></textarea>
         
         navigator.clipboard.writeText(JSON.stringify(config, null, 2)); 
         silentLog('Configurações copiadas!', "success"); 
+    }
+
+    // ==================== NOVA FUNÇÃO: Gerar pacote de dados iniciais ====================
+    function generateInitialDataPackage() {
+        const initialPackage = {
+            visitasEstados,
+            manualCoords,
+            visitasMunicipios,
+            manualCoordsMunicipios,
+            visitasBairros,
+            manualCoordsBairros,
+            dadosIDHBairros,
+            customBairrosData,
+            estadosMetadata,
+            style: { size: labelFontSize, weight: labelFontWeight, color: labelFontColor, title: systemTitle, selectionBox: showSelectionBoxFortaleza, balloonPadding: balloonPadding },
+            labelSettings: { showNameLabelsBrasil, showNameLabelsCeara, showNameLabelsFortaleza, showNumberLabelsBrasil, showNumberLabelsCeara, showNumberLabelsFortaleza },
+            autoCalculate,
+            autoBackup,
+            advancedStats,
+            importHistory: [],
+            lastValidConfig: null,
+            importMetadata: {
+                lastImportTimestamp: null,
+                importCount: 0,
+                totalImportedItems: 0
+            },
+            versionHistory: [],
+            analysisCache: {},
+            featureToggles,
+            theme: currentTheme
+        };
+
+        const jsonString = JSON.stringify(initialPackage, null, 4);
+        navigator.clipboard.writeText(jsonString).then(() => {
+            silentLog('Pacote de configuração inicial copiado para a área de transferência! Agora cole no lugar do objeto INITIAL_DATA.', 'success');
+            showToast('Configuração inicial copiada! Cole no código.', 'success');
+        }).catch(err => {
+            silentLog('Erro ao copiar: ' + err, 'error');
+            showToast('Erro ao copiar. Verifique as permissões.', 'error');
+        });
     }
 
     // ==================== FUNÇÕES DE NORMALIZAÇÃO ====================
@@ -5984,11 +5982,12 @@ MINAS GERAIS,1200,0.731'></textarea>
         try {
             silentLog("Inicializando mapa...");
             
+            // Garantia extra para versionHistory
+            if (!Array.isArray(window.versionHistory)) window.versionHistory = [];
+            
             silentLog("Carregando dados do banco...");
             await loadFromDatabase();
-            
-            // PERSISTÊNCIA TOTAL ATIVADA
-            // O sistema agora mantém exatamente o que está no banco
+            silentLog("Dados carregados com sucesso", "success");
             
             rebuildIDHIndex();
             calculateSums();
@@ -6033,7 +6032,11 @@ MINAS GERAIS,1200,0.731'></textarea>
                     : 'Data desconhecida';
             }
             
-            updateVersionHistoryDisplay();
+            try {
+                updateVersionHistoryDisplay();
+            } catch (e) {
+                silentLog("Erro ao atualizar display de histórico: " + e, "error");
+            }
             
             try {
                 silentLog("Carregando dados geográficos dos estados...");
