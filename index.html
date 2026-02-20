@@ -2358,49 +2358,34 @@ MINAS GERAIS,1200,0.731'></textarea>
                     ];
                     
                     let pending = ids.length;
+                    let hasData = false;
                     
                     function checkComplete() {
                         pending--;
                         if (pending === 0) {
                             silentLog('Todos os dados carregados do banco', 'success');
-                            // Após carregar, garantir que as estruturas estejam ok (deep merge com INITIAL_DATA para objetos aninhados)
-                            // Isso previne que um campo novo adicionado no INITIAL_DATA fique faltando.
-                            silentLog('Aplicando merge profundo com dados iniciais para garantir integridade...');
                             
-                            // Função de merge simples para objetos (deep merge)
-                            function deepMerge(target, source) {
-                                if (typeof target !== 'object' || target === null) return source;
-                                if (typeof source !== 'object' || source === null) return target;
+                            // SÓ APLICA O MERGE SE NÃO HOUVER DADOS CARREGADOS
+                            if (!hasData) {
+                                silentLog('Nenhum dado encontrado no banco. Usando dados iniciais...', 'warning');
                                 
-                                const output = { ...target };
-                                for (const key in source) {
-                                    if (source.hasOwnProperty(key)) {
-                                        if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])) {
-                                            output[key] = deepMerge(target[key], source[key]);
-                                        } else if (target[key] === undefined) {
-                                            output[key] = source[key];
-                                        }
-                                    }
-                                }
-                                return output;
+                                // Usar dados iniciais apenas se não houver nada no banco
+                                visitasEstados = { ...INITIAL_DATA.visitasEstados };
+                                manualCoords = { ...INITIAL_DATA.manualCoords };
+                                visitasMunicipios = { ...INITIAL_DATA.visitasMunicipios };
+                                manualCoordsMunicipios = { ...INITIAL_DATA.manualCoordsMunicipios };
+                                visitasBairros = { ...INITIAL_DATA.visitasBairros };
+                                manualCoordsBairros = { ...INITIAL_DATA.manualCoordsBairros };
+                                dadosIDHBairros = { ...INITIAL_DATA.dadosIDHBairros };
+                                customBairrosData = JSON.parse(JSON.stringify(INITIAL_DATA.customBairrosData));
+                                estadosMetadata = { ...INITIAL_DATA.estadosMetadata };
+                                importMetadata = { ...INITIAL_DATA.importMetadata };
+                                versionHistory = Array.isArray(INITIAL_DATA.versionHistory) ? [...INITIAL_DATA.versionHistory] : [];
+                                analysisCache = { ...INITIAL_DATA.analysisCache };
+                                featureToggles = { ...INITIAL_DATA.featureToggles };
                             }
                             
-                            // Aplicar merge para garantir que todas as propriedades do INITIAL_DATA existam
-                            visitasEstados = deepMerge(visitasEstados, INITIAL_DATA.visitasEstados);
-                            manualCoords = deepMerge(manualCoords, INITIAL_DATA.manualCoords);
-                            visitasMunicipios = deepMerge(visitasMunicipios, INITIAL_DATA.visitasMunicipios);
-                            manualCoordsMunicipios = deepMerge(manualCoordsMunicipios, INITIAL_DATA.manualCoordsMunicipios);
-                            visitasBairros = deepMerge(visitasBairros, INITIAL_DATA.visitasBairros);
-                            manualCoordsBairros = deepMerge(manualCoordsBairros, INITIAL_DATA.manualCoordsBairros);
-                            dadosIDHBairros = deepMerge(dadosIDHBairros, INITIAL_DATA.dadosIDHBairros);
-                            customBairrosData = deepMerge(customBairrosData, INITIAL_DATA.customBairrosData);
-                            estadosMetadata = deepMerge(estadosMetadata, INITIAL_DATA.estadosMetadata);
-                            importMetadata = deepMerge(importMetadata, INITIAL_DATA.importMetadata);
-                            versionHistory = Array.isArray(versionHistory) ? versionHistory : (Array.isArray(_versionHistory) ? _versionHistory : []);
-                            analysisCache = deepMerge(analysisCache, INITIAL_DATA.analysisCache);
-                            featureToggles = deepMerge(featureToggles, INITIAL_DATA.featureToggles);
-                            
-                            // Para configurações simples, garantir que tenham valores válidos
+                            // Garantir que configurações básicas existam
                             labelFontSize = labelFontSize || INITIAL_DATA.style.size;
                             labelFontWeight = labelFontWeight || INITIAL_DATA.style.weight;
                             labelFontColor = labelFontColor || INITIAL_DATA.style.color;
@@ -2412,7 +2397,7 @@ MINAS GERAIS,1200,0.731'></textarea>
                             advancedStats = (advancedStats !== undefined && advancedStats !== null) ? advancedStats : INITIAL_DATA.advancedStats;
                             currentTheme = currentTheme || INITIAL_DATA.theme;
                             
-                            silentLog('Merge concluído', 'success');
+                            silentLog('Carregamento concluído', 'success');
                             resolve();
                         }
                     }
@@ -2424,25 +2409,26 @@ MINAS GERAIS,1200,0.731'></textarea>
                             request.onsuccess = (event) => {
                                 const result = event.target.result;
                                 if (result && result.data !== undefined) {
+                                    hasData = true;
                                     silentLog(`Carregado: ${id}`);
                                     switch(id) {
-                                        case 'visitasEstados': visitasEstados = result.data; break;
-                                        case 'manualCoords': manualCoords = result.data; break;
-                                        case 'visitasMunicipios': visitasMunicipios = result.data; break;
-                                        case 'manualCoordsMunicipios': manualCoordsMunicipios = result.data; break;
-                                        case 'visitasBairros': visitasBairros = result.data; break;
-                                        case 'manualCoordsBairros': manualCoordsBairros = result.data; break;
-                                        case 'dadosIDHBairros': dadosIDHBairros = result.data; break;
-                                        case 'customBairrosData': customBairrosData = result.data; break;
-                                        case 'estadosMetadata': estadosMetadata = result.data; break;
+                                        case 'visitasEstados': visitasEstados = result.data || {}; break;
+                                        case 'manualCoords': manualCoords = result.data || {}; break;
+                                        case 'visitasMunicipios': visitasMunicipios = result.data || {}; break;
+                                        case 'manualCoordsMunicipios': manualCoordsMunicipios = result.data || {}; break;
+                                        case 'visitasBairros': visitasBairros = result.data || {}; break;
+                                        case 'manualCoordsBairros': manualCoordsBairros = result.data || {}; break;
+                                        case 'dadosIDHBairros': dadosIDHBairros = result.data || {}; break;
+                                        case 'customBairrosData': customBairrosData = result.data || { type: "FeatureCollection", features: [] }; break;
+                                        case 'estadosMetadata': estadosMetadata = result.data || {}; break;
                                         case 'style': 
                                             if (result.data) {
                                                 const style = result.data;
-                                                labelFontSize = style.size;
-                                                labelFontWeight = style.weight;
-                                                labelFontColor = style.color;
-                                                systemTitle = style.title;
-                                                showSelectionBoxFortaleza = style.selectionBox;
+                                                labelFontSize = style.size || 12;
+                                                labelFontWeight = style.weight || 'bold';
+                                                labelFontColor = style.color || '#333333';
+                                                systemTitle = style.title || 'Cidade Mais Infância';
+                                                showSelectionBoxFortaleza = style.selectionBox || false;
                                                 balloonPadding = style.balloonPadding || '4px 8px';
                                                 silentLog(`Estilo carregado: size=${labelFontSize}, weight=${labelFontWeight}, color=${labelFontColor}, balloonPadding=${balloonPadding}`);
                                                 
@@ -2458,25 +2444,25 @@ MINAS GERAIS,1200,0.731'></textarea>
                                         case 'labelSettings':
                                             if (result.data) {
                                                 const settings = result.data;
-                                                showNameLabelsBrasil = settings.showNameLabelsBrasil;
-                                                showNameLabelsCeara = settings.showNameLabelsCeara;
-                                                showNameLabelsFortaleza = settings.showNameLabelsFortaleza;
-                                                showNumberLabelsBrasil = settings.showNumberLabelsBrasil;
-                                                showNumberLabelsCeara = settings.showNumberLabelsCeara;
-                                                showNumberLabelsFortaleza = settings.showNumberLabelsFortaleza;
+                                                showNameLabelsBrasil = settings.showNameLabelsBrasil || false;
+                                                showNameLabelsCeara = settings.showNameLabelsCeara || false;
+                                                showNameLabelsFortaleza = settings.showNameLabelsFortaleza || false;
+                                                showNumberLabelsBrasil = settings.showNumberLabelsBrasil !== undefined ? settings.showNumberLabelsBrasil : true;
+                                                showNumberLabelsCeara = settings.showNumberLabelsCeara !== undefined ? settings.showNumberLabelsCeara : true;
+                                                showNumberLabelsFortaleza = settings.showNumberLabelsFortaleza !== undefined ? settings.showNumberLabelsFortaleza : true;
                                                 silentLog(`Label settings carregados`);
                                             }
                                             break;
-                                        case 'autoCalculate': autoCalculate = result.data; break;
-                                        case 'autoBackup': autoBackup = result.data; break;
-                                        case 'advancedStats': advancedStats = result.data; break;
-                                        case 'importHistory': importHistory = result.data; break;
-                                        case 'lastValidConfig': lastValidConfig = result.data; break;
-                                        case 'importMetadata': importMetadata = result.data; break;
-                                        case 'versionHistory': versionHistory = result.data; break;
-                                        case 'analysisCache': analysisCache = result.data; break;
-                                        case 'featureToggles': featureToggles = result.data; break;
-                                        case 'theme': currentTheme = result.data; break;
+                                        case 'autoCalculate': autoCalculate = result.data !== undefined ? result.data : true; break;
+                                        case 'autoBackup': autoBackup = result.data !== undefined ? result.data : true; break;
+                                        case 'advancedStats': advancedStats = result.data !== undefined ? result.data : true; break;
+                                        case 'importHistory': importHistory = Array.isArray(result.data) ? result.data : []; break;
+                                        case 'lastValidConfig': lastValidConfig = result.data || null; break;
+                                        case 'importMetadata': importMetadata = result.data || { lastImportTimestamp: null, importCount: 0, totalImportedItems: 0 }; break;
+                                        case 'versionHistory': versionHistory = Array.isArray(result.data) ? result.data : []; break;
+                                        case 'analysisCache': analysisCache = result.data || {}; break;
+                                        case 'featureToggles': featureToggles = result.data || { statisticalAnalysis: false, presentationMode: false }; break;
+                                        case 'theme': currentTheme = result.data || 'classic'; break;
                                     }
                                 } else {
                                     silentLog(`Nenhum dado encontrado para ${id}`, 'warning');
@@ -2505,7 +2491,41 @@ MINAS GERAIS,1200,0.731'></textarea>
             return Promise.resolve();
         }
     }
+
+    // Adicione esta função para diagnosticar problemas de salvamento
+    function diagnosticarBancoDados() {
+        console.group('🔍 Diagnóstico do Banco de Dados');
+        console.log('Dados atuais:');
+        console.log('- visitasEstados:', Object.keys(visitasEstados).length, 'itens', visitasEstados);
+        console.log('- visitasMunicipios:', Object.keys(visitasMunicipios).length, 'itens');
+        console.log('- visitasBairros:', Object.keys(visitasBairros).length, 'itens');
+        console.log('- dadosIDHBairros:', Object.keys(dadosIDHBairros).length, 'itens');
+        console.log('- dbInitialized:', dbInitialized);
+        console.log('- db:', db ? 'OK' : 'null');
+        console.log('- autoBackup:', autoBackup);
+        console.groupEnd();
+        
+        showToast('Diagnóstico concluído. Verifique o console (F12).', 'info');
+    }
+
+    // Adicione um botão no painel Admin para diagnóstico
+    // Coloque este código na função initializeAdminContainers ou no final do initMap
+    function adicionarBotaoDiagnostico() {
+        const ioPane = document.getElementById('io-pane');
+        if (ioPane) {
+            const btnDiv = document.createElement('div');
+            btnDiv.className = 'd-grid gap-2 mt-2';
+            btnDiv.innerHTML = `
+                <button class="btn btn-outline-secondary btn-sm" onclick="diagnosticarBancoDados()">
+                    <i class="fas fa-stethoscope me-1"></i> Diagnosticar Banco de Dados
+                </button>
+            `;
+            ioPane.appendChild(btnDiv);
+        }
+    }
+
     
+    // Substitua a função saveToDatabase existente por esta versão melhorada
     async function saveToDatabase() {
         if (!dbInitialized) {
             silentLog('Banco não inicializado, tentando abrir antes de salvar...', 'warning');
@@ -2513,92 +2533,112 @@ MINAS GERAIS,1200,0.731'></textarea>
                 await openDatabase();
             } catch (e) {
                 silentLog('Falha ao abrir banco para salvar: ' + e, 'error');
+                showToast('Erro ao salvar: não foi possível abrir o banco de dados', 'error');
                 return;
             }
         }
         
         showSavingIndicator(true);
-        try {
-            const database = db; 
-            return new Promise((resolve) => {
-                try {
-                    const transaction = database.transaction([STORE_NAME], 'readwrite');
-                    const store = transaction.objectStore(STORE_NAME);
-                    
-                    const saves = [
-                        { id: 'visitasEstados', data: visitasEstados },
-                        { id: 'manualCoords', data: manualCoords },
-                        { id: 'visitasMunicipios', data: visitasMunicipios },
-                        { id: 'manualCoordsMunicipios', data: manualCoordsMunicipios },
-                        { id: 'visitasBairros', data: visitasBairros },
-                        { id: 'manualCoordsBairros', data: manualCoordsBairros },
-                        { id: 'dadosIDHBairros', data: dadosIDHBairros },
-                        { id: 'customBairrosData', data: customBairrosData },
-                        { id: 'estadosMetadata', data: estadosMetadata },
-                        { id: 'style', data: { size: labelFontSize, weight: labelFontWeight, color: labelFontColor, title: systemTitle, selectionBox: showSelectionBoxFortaleza, balloonPadding: balloonPadding } },
-                        { id: 'labelSettings', data: { showNameLabelsBrasil, showNameLabelsCeara, showNameLabelsFortaleza, showNumberLabelsBrasil, showNumberLabelsCeara, showNumberLabelsFortaleza } },
-                        { id: 'autoCalculate', data: autoCalculate },
-                        { id: 'autoBackup', data: autoBackup },
-                        { id: 'advancedStats', data: advancedStats },
-                        { id: 'importHistory', data: importHistory },
-                        { id: 'importMetadata', data: importMetadata },
-                        { id: 'versionHistory', data: versionHistory },
-                        { id: 'analysisCache', data: analysisCache },
-                        { id: 'featureToggles', data: featureToggles },
-                        { id: 'theme', data: currentTheme }
-                    ];
-                    
-                    saves.forEach(save => {
-                        try {
-                            store.put({ id: save.id, data: save.data });
-                        } catch (e) {
-                            silentLog(`Erro ao salvar ${save.id}: ${e}`, 'error');
-                        }
-                    });
-                    
-                    const currentConfig = {
-                        visitasEstados, manualCoords, visitasMunicipios, manualCoordsMunicipios,
-                        visitasBairros, manualCoordsBairros, dadosIDHBairros, customBairrosData,
-                        estadosMetadata, 
-                        style: { size: labelFontSize, weight: labelFontWeight, color: labelFontColor, title: systemTitle, selectionBox: showSelectionBoxFortaleza, balloonPadding: balloonPadding },
-                        labelSettings: { showNameLabelsBrasil, showNameLabelsCeara, showNameLabelsFortaleza, showNumberLabelsBrasil, showNumberLabelsCeara, showNumberLabelsFortaleza },
-                        autoCalculate, autoBackup, advancedStats,
-                        importMetadata,
-                        featureToggles,
-                        theme: currentTheme,
-                        timestamp: new Date().toISOString()
-                    };
-                    
-                    try {
-                        store.put({ id: 'lastValidConfig', data: currentConfig });
-                    } catch (e) {
-                        silentLog(`Erro ao salvar backup: ${e}`, 'error');
-                    }
-                    
-                    transaction.oncomplete = () => {
-                        silentLog('Todos os dados salvos com sucesso', 'success');
-                        showSavingIndicator(false);
-                        resolve();
-                    };
-                    
-                    transaction.onerror = (e) => {
-                        silentLog(`Erro na transação de save: ${e}`, 'error');
-                        showSavingIndicator(false);
-                        resolve();
-                    };
-                    
-                } catch (error) {
-                    silentLog(`Erro na transação de save: ${error}`, 'error');
+        
+        // Criar uma promessa que resolve após um timeout para evitar travamentos
+        return new Promise(async (resolve) => {
+            try {
+                // Timeout de segurança
+                const timeout = setTimeout(() => {
+                    silentLog('Timeout ao salvar no banco', 'warning');
                     showSavingIndicator(false);
                     resolve();
+                }, 5000);
+                
+                const database = db;
+                const transaction = database.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                
+                // Preparar todos os dados para salvar
+                const saves = [
+                    { id: 'visitasEstados', data: visitasEstados },
+                    { id: 'manualCoords', data: manualCoords },
+                    { id: 'visitasMunicipios', data: visitasMunicipios },
+                    { id: 'manualCoordsMunicipios', data: manualCoordsMunicipios },
+                    { id: 'visitasBairros', data: visitasBairros },
+                    { id: 'manualCoordsBairros', data: manualCoordsBairros },
+                    { id: 'dadosIDHBairros', data: dadosIDHBairros },
+                    { id: 'customBairrosData', data: customBairrosData },
+                    { id: 'estadosMetadata', data: estadosMetadata },
+                    { id: 'style', data: { size: labelFontSize, weight: labelFontWeight, color: labelFontColor, title: systemTitle, selectionBox: showSelectionBoxFortaleza, balloonPadding: balloonPadding } },
+                    { id: 'labelSettings', data: { showNameLabelsBrasil, showNameLabelsCeara, showNameLabelsFortaleza, showNumberLabelsBrasil, showNumberLabelsCeara, showNumberLabelsFortaleza } },
+                    { id: 'autoCalculate', data: autoCalculate },
+                    { id: 'autoBackup', data: autoBackup },
+                    { id: 'advancedStats', data: advancedStats },
+                    { id: 'importHistory', data: importHistory },
+                    { id: 'importMetadata', data: importMetadata },
+                    { id: 'versionHistory', data: versionHistory },
+                    { id: 'analysisCache', data: analysisCache },
+                    { id: 'featureToggles', data: featureToggles },
+                    { id: 'theme', data: currentTheme }
+                ];
+                
+                let savedCount = 0;
+                
+                saves.forEach(save => {
+                    try {
+                        const request = store.put({ id: save.id, data: save.data });
+                        request.onsuccess = () => {
+                            savedCount++;
+                            if (savedCount === saves.length) {
+                                silentLog('Todos os dados foram salvos individualmente', 'success');
+                            }
+                        };
+                        request.onerror = (e) => {
+                            silentLog(`Erro ao salvar ${save.id}: ${e.target.error}`, 'error');
+                        };
+                    } catch (e) {
+                        silentLog(`Exceção ao salvar ${save.id}: ${e}`, 'error');
+                    }
+                });
+                
+                // Salvar configuração atual como último backup válido
+                const currentConfig = {
+                    visitasEstados, manualCoords, visitasMunicipios, manualCoordsMunicipios,
+                    visitasBairros, manualCoordsBairros, dadosIDHBairros, customBairrosData,
+                    estadosMetadata, 
+                    style: { size: labelFontSize, weight: labelFontWeight, color: labelFontColor, title: systemTitle, selectionBox: showSelectionBoxFortaleza, balloonPadding: balloonPadding },
+                    labelSettings: { showNameLabelsBrasil, showNameLabelsCeara, showNameLabelsFortaleza, showNumberLabelsBrasil, showNumberLabelsCeara, showNumberLabelsFortaleza },
+                    autoCalculate, autoBackup, advancedStats,
+                    importMetadata,
+                    featureToggles,
+                    theme: currentTheme,
+                    timestamp: new Date().toISOString()
+                };
+                
+                try {
+                    store.put({ id: 'lastValidConfig', data: currentConfig });
+                } catch (e) {
+                    silentLog(`Erro ao salvar backup: ${e}`, 'error');
                 }
-            });
-            
-        } catch (error) {
-            silentLog(`Erro ao abrir banco para salvar: ${error}`, 'error');
-            showSavingIndicator(false);
-            return Promise.resolve();
-        }
+                
+                transaction.oncomplete = () => {
+                    clearTimeout(timeout);
+                    silentLog('Transação de save concluída com sucesso', 'success');
+                    showSavingIndicator(false);
+                    resolve();
+                };
+                
+                transaction.onerror = (e) => {
+                    clearTimeout(timeout);
+                    silentLog(`Erro na transação de save: ${e.target.error}`, 'error');
+                    showSavingIndicator(false);
+                    showToast('Erro ao salvar no banco de dados', 'error');
+                    resolve();
+                };
+                
+            } catch (error) {
+                silentLog(`Erro crítico ao salvar: ${error}`, 'error');
+                showSavingIndicator(false);
+                showToast('Erro crítico ao salvar dados', 'error');
+                resolve();
+            }
+        });
     }
 
     // ==================== FEATURE TOGGLES ====================
